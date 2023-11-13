@@ -20,14 +20,15 @@ set(CMAKE_CXX_STANDARD 11)
 pico_sdk_init()
 
 # rest of your project
-add_executable(hello_world
-    hello_world.c
+add_executable(blinky
+    blinky.c
 )
 
 # Add pico_stdlib library which aggregates commonly used features
-target_link_libraries(hello_world 
+target_link_libraries(blinky
     pico_stdlib
     pico_cyw43_arch_none)
 
 # create map/bin/hex/uf2 file in addition to ELF.
-pico_add_extra_outputs(hello_world)
+pico_add_extra_outputs(blinky)
+pico_enable_stdio_uart(blinky 1)
