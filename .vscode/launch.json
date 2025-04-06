@@ -1,28 +1,27 @@
 {
     "version": "0.2.0",
     "configurations": [
-        {
-            "name": "Pico Debug",
-            "cwd": "${workspaceRoot}",
-            "executable": "${command:cmake.launchTargetPath}",
-            "request": "launch",
-            "type": "cortex-debug",
-            "servertype": "openocd",
-            // This may need to be "arm-none-eabi-gdb" for some previous builds
-            "gdbPath" : "gdb-multiarch",
-            "device": "RP2040",
-            "configFiles": [
-                "interface/picoprobe.cfg",
-                "target/rp2040.cfg"
-            ],
-            "svdFile": "/home/tomaz/Work/pico/pico-sdk/src/rp2040/hardware_regs/rp2040.svd",
-            "runToEntryPoint": "main",
-            // Work around for stopping at main on restart
-            "postRestartCommands": [
-                "break main",
-                "continue"
-            ],
-            "searchDir": ["/home/tomaz/Work/pico/openocd/tcl"]
-        }
+      {
+        "name": "Debug squid-test",
+        "type": "cppdbg",
+        "request": "launch",
+        "program": "${workspaceFolder}/build/squid-test",
+        "args": [],
+        "stopAtEntry": false,
+        "cwd": "${workspaceFolder}",
+        "environment": [],
+        "externalConsole": false,
+        "MIMode": "gdb",
+        "setupCommands": [
+          {
+            "description": "Enable pretty-printing for gdb",
+            "text": "-enable-pretty-printing",
+            "ignoreFailures": true
+          }
+        ],
+        "preLaunchTask": "Build (Debug)",
+        "miDebuggerPath": "/usr/bin/gdb"
+      }
     ]
-}
+  }
+  
