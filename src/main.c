@@ -1,46 +1,64 @@
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <stdint.h>
+#include <unistd.h>
 #include <time.h>
 #include "squid.h"
 
-static uint64_t get_time_ms(void)
+// Simulated circular input buffer (empty in this example)
+#define INPUT_BUFFER_SIZE 256
+static uint8_t input_buffer[INPUT_BUFFER_SIZE];
+static int input_head = 0;
+static int input_tail = 0;
+
+static int send_char(uint8_t c)
+{
+    // For now, print as hex to stdout (simulate send)
+    printf("[SEND] %02X\n", c);
+    return 0;
+}
+
+static int recv_char(void)
+{
+    // Simulate empty buffer
+    if (input_head == input_tail)
+        return -1;
+    uint8_t c = input_buffer[input_tail];
+    input_tail = (input_tail + 1) % INPUT_BUFFER_SIZE;
+    return c;
+}
+
+// Return a tick counter at ~50Hz, using clock time
+static uint8_t get_tick(void)
 {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t)(ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
-}
-
-static int send_bytes(const uint8_t *data, uint8_t len)
-{
-    // stub for now — log to console
-    printf("[SEND] ");
-    for (int i = 0; i < len; i++)
-        printf("%02X ", data[i]);
-    printf("\n");
-    return len;
-}
-
-static int recv_bytes(uint8_t *buffer, uint8_t len)
-{
-    // stub for now — no input
-    (void)buffer;
-    return 0;
+    return (uint8_t)((ts.tv_nsec / 20000000) & 0xFF); // ~50Hz tick
 }
 
 int main(void)
 {
     squid_platform_t plat = {
-        .send_bytes = send_bytes,
-        .recv_bytes = recv_bytes,
-        .get_time_ms = get_time_ms};
+        .send_char = send_char,
+        .recv_char = recv_char,
+        .get_tick = get_tick};
 
     squid_init(&plat);
 
     while (1)
     {
         squid_poll();
-        usleep(1000); // simulate 1ms tick
+
+        if (squid_is_connected())
+        {
+            uint8_t data[SQUID_DATA_SIZE];
+            squid_get_last_received(data);
+            printf("[RECV] ");
+            for (int i = 0; i < SQUID_DATA_SIZE; ++i)
+                printf("%02X ", data[i]);
+            printf("\n");
+        }
+
+        usleep(20000); // 50Hz loop
     }
 
     return 0;
