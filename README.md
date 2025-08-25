@@ -1,43 +1,105 @@
 # squid
 
-`squid` is a flexible serial communication protocol and hardware bridge designed to connect modern USB and wireless devices to retro 8-bit computers.
+`squid` is a lightweight, symmetrical serial communication protocol and hardware bridge designed to connect modern USB and wireless devices to retro 8-bit computers.
 
-## Overview
+## overview
 
-The primary implementation of `squid` runs on a Raspberry Pi Pico, which acts as a bridge between modern peripherals and a retro computer via a simple 8-bit-friendly serial protocol. The Pico reads input from USB devices such as:
+The primary implementation of `squid` runs on a Raspberry Pi Pico, which acts as a bridge between modern peripherals and a retro computer. The Pico reads input from USB devices such as:
 
-- Mice
-- Keyboards
-- Gamepads
-- Joysticks
+- mice  
+- keyboards  
+- gamepads  
+- joysticks
 
-It can also support WiFi and virtual devices, and multiplex data from multiple sources (e.g. a PC, network, or other USB hardware) into a single stream that is encoded using the `squid` protocol. This stream is then decoded on the 8-bit system.
+It can also support Wi-Fi and virtual devices. Multiple input sources (e.g., USB, PC host, network) can be multiplexed into a single stream encoded with the `squid` protocol. This stream is decoded on the 8-bit machine.
 
-The protocol is symmetrical, allowing both the 8-bit machine and the Pico to send and receive data in small, fixed-length packets optimized for interrupt-driven serial communication.
+`squid` is designed for **deterministic, interrupt-driven communication**: every interrupt tick can process exactly one block. This makes it practical for 8-bit systems where timing is tight and code must remain simple.
 
-## `libsquid`: Embedded Protocol Engine
+## why squid?
 
-The `libsquid` library is a lightweight C implementation of the core protocol logic, designed for embedding in both the Raspberry Pi Pico and on the 8-bit computer side. It handles:
+Existing protocols like SLIP, XMODEM, or TCP/IP are either too large or too irregular for 8-bit ISR handling. `squid` solves this by:
 
-- Packet parsing
-- State management (HELLO handshake, ACK/NAK, connection status)
-- Timeout and retry logic
-- Bidirectional flow control
+- using **short, fixed-size blocks** (always 24 or 5 bytes)  
+- avoiding variable-length parsing  
+- providing a **symmetrical design** (both sides use the same simple state machine)  
+- embedding error detection (hash, ACK/NAK, retry)
 
-### Features
+This keeps implementations tiny and predictable.
 
-- Two block formats:
-  - **Data blocks** (24 bytes) carry payloads with ACK/NAK and metadata
-  - **Control blocks** (5 bytes) carry simple commands (e.g. PING)
-- Uses small, fixed-size blocks to minimize complexity and fit within interrupt timing constraints
-- Timeout and retry system based on a simple `get_tick()` function that returns a monotonically increasing counter (typically incremented at 50 Hz)
-- Symmetrical sender/receiver behavior with built-in error handling
-- Requires only three platform hooks:
-  - `send_char(uint8_t)` – send one byte
-  - `recv_char(void)` – receive one byte (returns -1 if unavailable)
-  - `get_tick(void)` – return time tick counter
+## block formats
 
-### Platform Integration Example
+### data block (24 bytes)
+
+Carries application data and includes sequencing and ACK information.
+
+```
++-----+-----+-----+-----+-----+-----+----------------+-----+-----+
+| STX | SEQ | ACK | STS | TYP | FLG | 16-byte data  | HSH | ETX |
++-----+-----+-----+-----+-----+-----+----------------+-----+-----+
+ 0     1     2     3     4     5     6 .. 21         22    23
+```
+
+- **STX** = 0x7E  
+- **SEQ** = sequence number of this block  
+- **ACK** = last sequence received from peer  
+- **STS** = status (OK or NAK)  
+- **TYP** = block type (HELLO, HELLO_ACK, DATA, etc.)  
+- **FLG** = reserved for future use  
+- **data** = 16-byte payload  
+- **HSH** = XOR of bytes 1..21  
+- **ETX** = 0xD3
+
+### control block (5 bytes)
+
+Carries simple commands such as PING.
+
+```
++----------+-----+-----+-----+----------+
+| CTRL_STX | SEQ | ACK | CMD | CTRL_ETX |
++----------+-----+-----+-----+----------+
+ 0          1     2     3     4
+```
+
+- **CTRL_STX** = 0xE0  
+- **CMD** = command (e.g., PING = 0x01)  
+- **CTRL_ETX** = 0xCF
+
+## state machine
+
+Each side runs the same logic:
+
+- **STARTUP** → send `HELLO` until a `HELLO_ACK` is received  
+- **CONNECTED** → normal data exchange, ACK/NAK handled  
+- **WAITING_ACK** → last block retransmitted until ACK is received or timeout occurs  
+- **DISCONNECTED** → retries exceeded; fall back to STARTUP after a pause
+
+## timing model
+
+- `get_tick()` must return an **8-bit counter** that increments regularly (e.g., 50 Hz).  
+- timeout logic uses 8-bit wraparound arithmetic (`(uint8_t)(now - since)`), so wrap is safe.  
+- this allows a simple 8-bit ISR to keep the link alive without large counters.
+
+## libsquid: embedded protocol engine
+
+The `libsquid` library is a small C implementation of the protocol, designed for both the Pico and the 8-bit computer. It handles:
+
+- parsing and framing of blocks  
+- connection state transitions  
+- timeout and retry logic  
+- ACK/NAK management  
+- ping/keepalive
+
+### platform hooks
+
+Only three functions are needed:
+
+```c
+int send_char(uint8_t c);   // send one byte
+int recv_char(void);        // return -1 if none
+uint8_t get_tick(void);     // 8-bit tick counter
+```
+
+### example integration
 
 ```c
 squid_platform_t plat = {
@@ -58,14 +120,18 @@ while (true) {
 }
 ```
 
-### Project Structure
+## project structure
 
 ```
 include/        Public headers (squid.h)
-lib/squid/      Protocol logic implementation (libsquid)
-src/            Test program or integration example
+lib/squid/      Protocol logic (libsquid)
+src/            Test program / integration example
 ```
 
-### Status
+## status
 
-squid is under active development. The libsquid protocol engine is complete and being integrated into the Raspberry Pi Pico firmware. Future updates will include device drivers for USB and WiFi, command multiplexing, and retro machine-specific client libraries.
+The core `libsquid` engine is functional and tested in loopback simulation. Integration with Raspberry Pi Pico firmware is in progress, and work on retro machine clients will follow. Upcoming features include:
+
+- USB and Wi-Fi device drivers on the Pico  
+- command multiplexing  
+- retro-specific client libraries
