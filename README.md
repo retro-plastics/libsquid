@@ -1,3 +1,5 @@
+![status.badge] [![language.badge]][language.url] [![standard.badge]][standard.url] [![license.badge]][license.url]
+
 # libsquid
 
 `libsquid` is a lightweight, symmetric serial transport for low-power
@@ -224,3 +226,14 @@ tests/test_squid.c loopback tests
 - Data not received:
   both sides must attach sockets to the same channel-port using
   `squid_bind(..., ch)` / `squid_connect(..., ch)`.
+
+[language.url]:   https://en.wikipedia.org/wiki/ANSI_C
+[language.badge]: https://img.shields.io/badge/language-C-blue.svg
+
+[standard.url]:   https://en.wikipedia.org/wiki/C11_(C_standard_revision)
+[standard.badge]: https://img.shields.io/badge/standard-C11-blue.svg
+
+[license.url]:    https://github.com/tstih/libcpm3-z80/blob/main/LICENSE
+[license.badge]:  https://img.shields.io/badge/license-MIT-blue.svg
+
+[status.badge]:  https://img.shields.io/badge/status-stable-dkgreen.svg
