@@ -1,6 +1,9 @@
 /* lib/squid/init.c */
 #include "internal.h"   /* provides g_snet context, types, and state enums */
 
+/* global engine context (single instance) */
+snet_ctx_t g_snet;
+
 /* free all dynamic channels and their queued nodes (used on re-init) */
 static void _free_all_channels(void)
 {

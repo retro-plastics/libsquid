@@ -23,6 +23,28 @@
 #define SNET_CH_MASK  ((uint8_t)0xF0u)
 #define SNET_LEN_MASK ((uint8_t)0x0Fu)
 
+/* ---- frame types (3 bits, stored in CTRL TYP field) ---- */
+#define SNET_TYP_HELLO     0u  /* handshake request */
+#define SNET_TYP_HELLO_ACK 1u  /* handshake response */
+#define SNET_TYP_DATA      2u  /* application data */
+#define SNET_TYP_ACK       3u  /* acknowledgment only (no payload) */
+#define SNET_TYP_PING      4u  /* keepalive */
+
+/* ---- SYS channel ---- */
+#define SNET_CH_SYS        0u
+
+/* ---- helper macros for frame fields ---- */
+#define SNET_MAKE_CHLEN(ch,len)  ((uint8_t)(((ch) << SNET_CH_SHIFT) | ((len) & SNET_LEN_MASK)))
+#define SNET_MAKE_CTRL(typ,sts,seq) \
+    ((uint8_t)( ((typ) << SNET_CTRL_TYP_SHIFT) | \
+                ((sts) ? SNET_CTRL_STS_MASK : 0u) | \
+                ((seq) ? SNET_CTRL_SEQ_MASK : 0u) ))
+#define SNET_GET_TYP(ctrl)   (((ctrl) & SNET_CTRL_TYP_MASK) >> SNET_CTRL_TYP_SHIFT)
+#define SNET_GET_STS(ctrl)   (((ctrl) & SNET_CTRL_STS_MASK) ? 1u : 0u)
+#define SNET_GET_SEQ(ctrl)   (((ctrl) & SNET_CTRL_SEQ_MASK) ? 1u : 0u)
+#define SNET_GET_CH(chlen)   (((chlen) & SNET_CH_MASK) >> SNET_CH_SHIFT)
+#define SNET_GET_LEN(chlen)  ((chlen) & SNET_LEN_MASK)
+
 /* ---- engine states (private) ---- */
 typedef enum {
     SNET_ENG_STARTUP = 0,
@@ -73,6 +95,10 @@ typedef struct {
 
     /* last-sent frame (for resend on timeout) */
     uint8_t last_sent[SNET_FRAME_BYTES];
+
+    /* RX assembly buffer */
+    uint8_t rx_buf[SNET_FRAME_BYTES];
+    uint8_t rx_pos;             /* next write position in rx_buf */
 
     /* dynamic channels + allocator */
     snet_chan_t *chan_head; /* forward list of active channels */

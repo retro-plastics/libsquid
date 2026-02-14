@@ -1,14 +1,15 @@
 # lib/squid/CMakeLists.txt
 
-# Create the squid protocol library
 add_library(squid
-    protocol.c
+    init.c
+    link.c
+    burst.c
+    socket.c
 )
 
-# Public headers are in the main include directory
 target_include_directories(squid
-    PUBLIC ${CMAKE_SOURCE_DIR}/include
+    PUBLIC  ${CMAKE_SOURCE_DIR}/include
+    PRIVATE ${CMAKE_SOURCE_DIR}/lib
 )
 
-# Enable debug symbols
-target_compile_options(squid PRIVATE -g)
+target_compile_options(squid PRIVATE -Wall -Wextra -g)

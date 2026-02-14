@@ -1,137 +1,221 @@
-# squid
+# libsquid
 
-`squid` is a lightweight, symmetrical serial communication protocol and hardware bridge designed to connect modern USB and wireless devices to retro 8-bit computers.
+`libsquid` is a lightweight, symmetric serial transport for low-power
+systems and retro computers.
 
-## overview
+It gives you:
+- Fixed-size 20-byte frames (easy parser on 8-bit targets)
+- Reliable delivery with ACK + retransmit
+- Multiplexing via 15 application channels ("sockets")
+- Non-blocking cooperative API (`snet_burst()`)
 
-The primary implementation of `squid` runs on a Raspberry Pi Pico, which acts as a bridge between modern peripherals and a retro computer. The Pico reads input from USB devices such as:
+## Quick Start
 
-- mice  
-- keyboards  
-- gamepads  
-- joysticks
+### 1) Build
 
-It can also support Wi-Fi and virtual devices. Multiple input sources (e.g., USB, PC host, network) can be multiplexed into a single stream encoded with the `squid` protocol. This stream is decoded on the 8-bit machine.
-
-`squid` is designed for **deterministic, interrupt-driven communication**: every interrupt tick can process exactly one block. This makes it practical for 8-bit systems where timing is tight and code must remain simple.
-
-## why squid?
-
-Existing protocols like SLIP, XMODEM, or TCP/IP are either too large or too irregular for 8-bit ISR handling. `squid` solves this by:
-
-- using **short, fixed-size blocks** (always 24 or 5 bytes)  
-- avoiding variable-length parsing  
-- providing a **symmetrical design** (both sides use the same simple state machine)  
-- embedding error detection (hash, ACK/NAK, retry)
-
-This keeps implementations tiny and predictable.
-
-## block formats
-
-### data block (24 bytes)
-
-Carries application data and includes sequencing and ACK information.
-
-```
-+-----+-----+-----+-----+-----+-----+----------------+-----+-----+
-| STX | SEQ | ACK | STS | TYP | FLG | 16-byte data  | HSH | ETX |
-+-----+-----+-----+-----+-----+-----+----------------+-----+-----+
- 0     1     2     3     4     5     6 .. 21         22    23
+```bash
+cmake -S . -B build
+cmake --build build -j4
 ```
 
-- **STX** = 0x7E  
-- **SEQ** = sequence number of this block  
-- **ACK** = last sequence received from peer  
-- **STS** = status (OK or NAK)  
-- **TYP** = block type (HELLO, HELLO_ACK, DATA, etc.)  
-- **FLG** = reserved for future use  
-- **data** = 16-byte payload  
-- **HSH** = XOR of bytes 1..21  
-- **ETX** = 0xD3
+### 2) Run tests
 
-### control block (5 bytes)
-
-Carries simple commands such as PING.
-
-```
-+----------+-----+-----+-----+----------+
-| CTRL_STX | SEQ | ACK | CMD | CTRL_ETX |
-+----------+-----+-----+-----+----------+
- 0          1     2     3     4
+```bash
+ctest --test-dir build --output-on-failure
 ```
 
-- **CTRL_STX** = 0xE0  
-- **CMD** = command (e.g., PING = 0x01)  
-- **CTRL_ETX** = 0xCF
+### 3) Try the chat demo
 
-## state machine
+In terminal 1:
 
-Each side runs the same logic:
+```bash
+mkfifo /tmp/a2b /tmp/b2a
+./build/squid-chat < /tmp/b2a > /tmp/a2b
+```
 
-- **STARTUP** → send `HELLO` until a `HELLO_ACK` is received  
-- **CONNECTED** → normal data exchange, ACK/NAK handled  
-- **WAITING_ACK** → last block retransmitted until ACK is received or timeout occurs  
-- **DISCONNECTED** → retries exceeded; fall back to STARTUP after a pause
+In terminal 2:
 
-## timing model
+```bash
+./build/squid-chat < /tmp/a2b > /tmp/b2a
+```
 
-- `get_tick()` must return an **8-bit counter** that increments regularly (e.g., 50 Hz).  
-- timeout logic uses 8-bit wraparound arithmetic (`(uint8_t)(now - since)`), so wrap is safe.  
-- this allows a simple 8-bit ISR to keep the link alive without large counters.
+Type in either terminal and press Enter to send.
 
-## libsquid: embedded protocol engine
+## 5-Minute Integration
 
-The `libsquid` library is a small C implementation of the protocol, designed for both the Pico and the 8-bit computer. It handles:
-
-- parsing and framing of blocks  
-- connection state transitions  
-- timeout and retry logic  
-- ACK/NAK management  
-- ping/keepalive
-
-### platform hooks
-
-Only three functions are needed:
+### Step 1: implement platform hooks
 
 ```c
-int send_char(uint8_t c);   // send one byte
-int recv_char(void);        // return -1 if none
-uint8_t get_tick(void);     // 8-bit tick counter
+#include <stdlib.h>
+#include "squid/snet.h"
+
+static int uart_send(uint8_t c) { /* send one byte */ return 0; }
+static int uart_recv(void)      { /* return byte or -1 */ return -1; }
+static uint8_t hw_tick(void)    { /* wraps naturally at 255 */ return 0; }
+
+static const squid_platform_t plat = {
+    .send_char = uart_send,
+    .recv_char = uart_recv,
+    .get_tick  = hw_tick,
+    .malloc    = (void *(*)(uint16_t))malloc,
+    .free      = free,
+};
 ```
 
-### example integration
+### Step 2: initialize engine timing
 
 ```c
-squid_platform_t plat = {
-    .send_char = my_uart_send,
-    .recv_char = my_uart_recv,
-    .get_tick  = my_tick_counter
+squid_timing_t tm = {
+    .timeout_ticks   = 6,
+    .ack_delay_ticks = 2,
+    .ping_ticks      = 0,  /* disable keepalive by default */
+    .max_retries     = 3,
 };
 
-squid_init(&plat);
+snet_init(&plat, &tm);
+```
 
-while (true) {
-    squid_poll();
-    if (squid_is_connected()) {
-        uint8_t data[16];
-        squid_get_last_received(data);
-        // process data
+### Step 3: pump protocol in your main loop
+
+```c
+int sock = -1;
+
+for (;;) {
+    snet_burst();  /* bounded work: at most one RX + one TX frame */
+
+    if (snet_link_is_up()) {
+        if (sock < 0) sock = squid_open();
+
+        /* send */
+        static const uint8_t hello[] = "Hi";
+        squid_send(sock, hello, sizeof(hello) - 1);
+
+        /* receive */
+        uint8_t buf[64];
+        int n = squid_recv(sock, buf, sizeof(buf));
+        if (n > 0) {
+            /* use buf[0..n-1] */
+        }
     }
+
+    /* your application work here */
 }
 ```
 
-## project structure
+## Architecture
 
+`libsquid` has two layers:
+
+```text
+socket layer (socket.h): squid_open / squid_send / squid_recv / squid_close
+snet layer   (snet.h):   snet_init / snet_burst / snet_link_is_up
+platform hooks:          send_char / recv_char / get_tick / malloc / free
 ```
-include/        Public headers (squid.h)
-lib/squid/      Protocol logic (libsquid)
-src/            Test program / integration example
+
+- `snet` handles framing, handshake, ACK/timeout logic, and keepalive.
+- `socket` provides multiplexed byte streams (channels `1..15`).
+
+## Wire Protocol
+
+Every frame is exactly 20 bytes:
+
+```text
++-----+-------+------+--- 15 bytes ---+-----+-----+
+| STX | CHLEN | CTRL |    payload     | HSH | ETX |
++-----+-------+------+----------------+-----+-----+
+  0      1       2       3 .. 17        18    19
 ```
 
-## status
+- `STX = 0x7E`, `ETX = 0xD3`
+- `HSH` is XOR over bytes `1..17`
+- `CHLEN`: high nibble channel, low nibble payload length (`0..15`)
+- `CTRL`: type, status, sequence bit
 
-The core `libsquid` engine is functional and tested in loopback simulation. Integration with Raspberry Pi Pico firmware is in progress, and work on retro machine clients will follow. Upcoming features include:
+Frame types:
+- `HELLO`
+- `HELLO_ACK`
+- `DATA`
+- `ACK`
+- `PING`
 
-- USB and Wi-Fi device drivers on the Pico  
-- command multiplexing  
-- retro-specific client libraries
+## State Machine
+
+```text
+STARTUP -> CONNECTED -> WAITING
+   ^           |          |
+   |           +----------+
+   +-------- DISCONNECTED
+```
+
+- `STARTUP`: periodic `HELLO` until handshake completes.
+- `CONNECTED`: normal data flow.
+- `WAITING`: sent `DATA`, waiting for ACK (or timeout/resend).
+- `DISCONNECTED`: retries exceeded, pause then retry startup.
+
+## Timing Model
+
+`get_tick()` is an 8-bit tick source. Wraparound math is intentional:
+
+```c
+uint8_t elapsed = (uint8_t)(now - since);
+```
+
+Defaults:
+- `timeout_ticks = 6`
+- `ack_delay_ticks = 2`
+- `ping_ticks = 0` (disabled)
+- `max_retries = 3`
+
+## API Reference
+
+From `include/squid/snet.h`:
+
+```c
+typedef struct {
+    int     (*send_char)(uint8_t c);
+    int     (*recv_char)(void);
+    uint8_t (*get_tick)(void);
+    void*   (*malloc)(uint16_t n);
+    void    (*free)(void* p);
+} squid_platform_t;
+
+typedef struct {
+    uint8_t timeout_ticks;
+    uint8_t ack_delay_ticks;
+    uint8_t ping_ticks;
+    uint8_t max_retries;
+} squid_timing_t;
+
+void snet_init(const squid_platform_t *plat, const squid_timing_t *tm);
+void snet_burst(void);
+bool snet_link_is_up(void);
+```
+
+From `include/squid/socket.h`:
+
+```c
+int  squid_open(void);   /* returns channel 1..15, or -1 */
+void squid_close(int ch);
+int  squid_send(int ch, const uint8_t *data, uint16_t len);
+int  squid_recv(int ch, uint8_t *buf, uint16_t max);
+```
+
+## Project Layout
+
+```text
+include/squid/     public headers
+lib/squid/         protocol implementation
+src/main.c         chat demo
+tests/test_squid.c loopback tests
+lab/pico/          pico experiments
+```
+
+## Troubleshooting
+
+- `squid-chat` error `/dev/tty: No such device or address`:
+  run it from an interactive terminal session. The demo reads keyboard
+  input from `/dev/tty` on purpose.
+- Link never comes up:
+  ensure both peers call `snet_burst()` continuously.
+- Data not received:
+  both sides must open matching channel ids (typically first open is `1`).

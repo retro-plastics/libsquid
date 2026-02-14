@@ -23,7 +23,11 @@ typedef struct {
     uint8_t max_retries;      /* typical value: 3 */
 } squid_timing_t;
 
-/* Engine control. */
+/* Type aliases (internal.h uses snet_ prefix). */
+typedef squid_platform_t snet_platform_t;
+typedef squid_timing_t   snet_timing_t;
+
+/* Engine control (low-level). */
 void     snet_init(const squid_platform_t *plat, const squid_timing_t *tm);
 void     snet_burst(void);              /* process at most one RX and one TX */
 bool     snet_link_is_up(void);
