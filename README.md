@@ -207,7 +207,6 @@ include/squid/     public headers
 lib/squid/         protocol implementation
 src/main.c         chat demo
 tests/test_squid.c loopback tests
-lab/pico/          pico experiments
 ```
 
 ## Troubleshooting
