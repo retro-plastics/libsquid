@@ -84,7 +84,10 @@ for (;;) {
     snet_burst();  /* bounded work: at most one RX + one TX frame */
 
     if (snet_link_is_up()) {
-        if (sock < 0) sock = squid_open();
+        if (sock < 0) {
+            sock = squid_open();
+            if (sock >= 0) squid_connect(sock, 1); /* channel-port 1 */
+        }
 
         /* send */
         static const uint8_t hello[] = "Hi";
@@ -107,7 +110,7 @@ for (;;) {
 `libsquid` has two layers:
 
 ```text
-socket layer (socket.h): squid_open / squid_send / squid_recv / squid_close
+socket layer (socket.h): squid_open / squid_bind|squid_connect / squid_send / squid_recv / squid_close
 snet layer   (snet.h):   snet_init / snet_burst / snet_link_is_up
 platform hooks:          send_char / recv_char / get_tick / malloc / free
 ```
@@ -194,10 +197,12 @@ bool snet_link_is_up(void);
 From `include/squid/socket.h`:
 
 ```c
-int  squid_open(void);   /* returns channel 1..15, or -1 */
-void squid_close(int ch);
-int  squid_send(int ch, const uint8_t *data, uint16_t len);
-int  squid_recv(int ch, uint8_t *buf, uint16_t max);
+int  squid_open(void);   /* returns local fd 1..15, or -1 */
+int  squid_bind(int fd, uint8_t ch);    /* server-style attach */
+int  squid_connect(int fd, uint8_t ch); /* client-style attach */
+void squid_close(int fd);
+int  squid_send(int fd, const uint8_t *data, uint16_t len);
+int  squid_recv(int fd, uint8_t *buf, uint16_t max);
 ```
 
 ## Project Layout
@@ -217,4 +222,5 @@ tests/test_squid.c loopback tests
 - Link never comes up:
   ensure both peers call `snet_burst()` continuously.
 - Data not received:
-  both sides must open matching channel ids (typically first open is `1`).
+  both sides must attach sockets to the same channel-port using
+  `squid_bind(..., ch)` / `squid_connect(..., ch)`.

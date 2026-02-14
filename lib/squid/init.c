@@ -18,7 +18,8 @@ static void _free_all_channels(void)
         c = nextc;
     }
     g_snet.chan_head  = (snet_chan_t*)0;             /* allocator reset */
-    g_snet.used_mask  = 0u;
+    g_snet.fd_mask    = 0u;
+    g_snet.ch_mask    = 0u;
     g_snet.rr_last_id = 0xFFu;
 }
 
@@ -56,7 +57,8 @@ void snet_init(const snet_platform_t *plat, const snet_timing_t *tm)
     g_snet.link_up     = 0u;                                        /* handshake not done */
 
     g_snet.chan_head   = (snet_chan_t*)0;                           /* no channels yet */
-    g_snet.used_mask   = 0u;
+    g_snet.fd_mask     = 0u;
+    g_snet.ch_mask     = 0u;
     g_snet.rr_last_id  = 0xFFu;
     /* g_snet.last_sent[] already zero from memset */
 }

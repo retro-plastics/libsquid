@@ -61,10 +61,11 @@ typedef struct snet_node {
     uint8_t  data[]; /* flexible array (C99) */
 } snet_node_t;
 
-/* ---- dynamic channel (linked list; <=16 total) ---- */
+/* ---- dynamic socket (linked list; <=15 total) ---- */
 typedef struct snet_chan {
     struct snet_chan *next;
-    uint8_t  id;                    /* 0..15 (0 reserved for SYS; never handed out) */
+    uint8_t  fd;                    /* local handle: 1..15 */
+    uint8_t  ch_id;                 /* bound channel: 1..15, 0 when unbound */
     snet_node_t *tx_head, *tx_tail; /* app -> wire */
     snet_node_t *rx_head, *rx_tail; /* wire -> app */
     uint16_t  tx_bytes, rx_bytes;   /* queued bytes */
@@ -100,9 +101,10 @@ typedef struct {
     uint8_t rx_buf[SNET_FRAME_BYTES];
     uint8_t rx_pos;             /* next write position in rx_buf */
 
-    /* dynamic channels + allocator */
-    snet_chan_t *chan_head; /* forward list of active channels */
-    uint16_t     used_mask; /* bit i set => channel i in use (1..15) */
+    /* dynamic sockets + allocator */
+    snet_chan_t *chan_head; /* forward list of open sockets */
+    uint16_t     fd_mask;   /* bit i set => fd i in use (1..15) */
+    uint16_t     ch_mask;   /* bit i set => channel i in use (1..15) */
     uint8_t      rr_last_id;/* last channel served for round-robin (0xFF = none) */
 } snet_ctx_t;
 

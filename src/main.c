@@ -66,7 +66,12 @@ int main(void)
 
         if (snet_link_is_up() && sock < 0) {
             sock = squid_open();
-            fprintf(stderr, "connected!\nyou> ");
+            if (sock >= 0 && squid_connect(sock, 1) == 0) {
+                fprintf(stderr, "connected!\nyou> ");
+            } else {
+                if (sock >= 0) squid_close(sock);
+                sock = -1;
+            }
         }
 
         if (sock >= 0) {

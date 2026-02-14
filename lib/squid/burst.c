@@ -93,11 +93,11 @@ static void _build_and_send(uint8_t typ, uint8_t sts, uint8_t ch,
     _send_frame(frame);
 }
 
-/* ---- find channel by id ---- */
-static snet_chan_t *_find_chan(uint8_t id)
+/* ---- find socket bound to channel id ---- */
+static snet_chan_t *_find_chan(uint8_t ch_id)
 {
     snet_chan_t *c = g_snet.chan_head;
-    while (c) { if (c->id == id) return c; c = c->next; }
+    while (c) { if (c->ch_id == ch_id) return c; c = c->next; }
     return (snet_chan_t*)0;
 }
 
@@ -309,7 +309,7 @@ static void _tx(void)
             if (ch) {
                 uint8_t pay[SNET_PAY_MAX];
                 uint8_t n = _dequeue_tx(ch, pay);
-                _build_and_send(SNET_TYP_DATA, 0, ch->id, pay, n);
+                _build_and_send(SNET_TYP_DATA, 0, ch->ch_id, pay, n);
                 g_snet.eng = SNET_ENG_WAITING;
             } else {
                 _build_and_send(SNET_TYP_ACK, 0, SNET_CH_SYS,
@@ -324,7 +324,7 @@ static void _tx(void)
         if (ch) {
             uint8_t pay[SNET_PAY_MAX];
             uint8_t n = _dequeue_tx(ch, pay);
-            _build_and_send(SNET_TYP_DATA, 0, ch->id, pay, n);
+            _build_and_send(SNET_TYP_DATA, 0, ch->ch_id, pay, n);
             g_snet.eng = SNET_ENG_WAITING;
             break;
         }

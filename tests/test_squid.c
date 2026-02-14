@@ -207,9 +207,10 @@ TEST(test_open_close_socket)
     pump(20);
 
     load_a();
-    int ch = squid_open();
-    ASSERT(ch >= 1 && ch <= 15, "channel id should be 1..15");
-    squid_close(ch);
+    int fd = squid_open();
+    ASSERT(fd >= 1 && fd <= 15, "fd should be 1..15");
+    ASSERT(squid_bind(fd, 1) == 0, "bind should succeed");
+    squid_close(fd);
     save_a();
 
     return 1;
@@ -239,15 +240,17 @@ TEST(test_send_recv_single)
     setup();
     pump(20);
 
-    /* open socket 1 on both sides */
+    /* open and attach to channel 1 on both sides */
     load_a();
     int sa = squid_open();
-    ASSERT(sa == 1, "A socket should be 1");
+    ASSERT(sa >= 1, "A fd should be valid");
+    ASSERT(squid_connect(sa, 1) == 0, "A connect ch1");
     save_a();
 
     load_b();
     int sb = squid_open();
-    ASSERT(sb == 1, "B socket should be 1");
+    ASSERT(sb >= 1, "B fd should be valid");
+    ASSERT(squid_bind(sb, 1) == 0, "B bind ch1");
     save_b();
 
     /* A sends 5 bytes */
@@ -277,10 +280,14 @@ TEST(test_bidirectional)
 
     load_a();
     int sa = squid_open();
+    ASSERT(sa >= 1, "A fd valid");
+    ASSERT(squid_connect(sa, 1) == 0, "A connect ch1");
     save_a();
 
     load_b();
     int sb = squid_open();
+    ASSERT(sb >= 1, "B fd valid");
+    ASSERT(squid_bind(sb, 1) == 0, "B bind ch1");
     save_b();
 
     /* A sends to B */
@@ -322,10 +329,14 @@ TEST(test_large_transfer)
 
     load_a();
     int sa = squid_open();
+    ASSERT(sa >= 1, "A fd valid");
+    ASSERT(squid_connect(sa, 1) == 0, "A connect ch1");
     save_a();
 
     load_b();
     int sb = squid_open();
+    ASSERT(sb >= 1, "B fd valid");
+    ASSERT(squid_bind(sb, 1) == 0, "B bind ch1");
     save_b();
 
     /* send 100 bytes (needs multiple 15-byte frames) */
@@ -355,19 +366,21 @@ TEST(test_two_sockets_isolated)
     setup();
     pump(20);
 
-    /* open sockets 1 and 2 on both sides */
+    /* open two sockets on each side and bind/connect channels 1 and 2 */
     load_a();
     int sa1 = squid_open();
     int sa2 = squid_open();
-    ASSERT(sa1 == 1, "A socket 1");
-    ASSERT(sa2 == 2, "A socket 2");
+    ASSERT(sa1 >= 1 && sa2 >= 1, "A fds valid");
+    ASSERT(squid_connect(sa1, 1) == 0, "A connect ch1");
+    ASSERT(squid_connect(sa2, 2) == 0, "A connect ch2");
     save_a();
 
     load_b();
     int sb1 = squid_open();
     int sb2 = squid_open();
-    ASSERT(sb1 == 1, "B socket 1");
-    ASSERT(sb2 == 2, "B socket 2");
+    ASSERT(sb1 >= 1 && sb2 >= 1, "B fds valid");
+    ASSERT(squid_bind(sb1, 1) == 0, "B bind ch1");
+    ASSERT(squid_bind(sb2, 2) == 0, "B bind ch2");
     save_b();
 
     /* send different data on each socket */

@@ -7,14 +7,17 @@ extern "C" {
 
 /* Multiplexed socket API.
  *
- * Each socket maps to a channel (1..15) on the squid wire protocol.
- * Both sides must open the same channel id to exchange data.
- * Received blocks are queued per-channel and copied out on recv.
+ * squid_open() returns a local handle (fd-like). You then bind/connect
+ * that socket to a wire channel (1..15), which acts like a "port".
+ *
+ * Received blocks are queued per bound socket and copied out on recv.
  */
-int      squid_open(void);              /* returns channel id 1..15, or -1 */
-void     squid_close(int ch);
-int      squid_send(int ch, const uint8_t *data, uint16_t len);
-int      squid_recv(int ch, uint8_t *buf, uint16_t max);
+int      squid_open(void);              /* returns fd 1..15, or -1 */
+int      squid_bind(int fd, uint8_t ch);
+int      squid_connect(int fd, uint8_t ch);
+void     squid_close(int fd);
+int      squid_send(int fd, const uint8_t *data, uint16_t len);
+int      squid_recv(int fd, uint8_t *buf, uint16_t max);
 
 #ifdef __cplusplus
 }
